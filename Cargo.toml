@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "lib/ic_ecdsa",
+#    "lib/ic_call",
+    "lib/ic_ledger",
+    "lib/ic_identity",
+    "lib/ic_governance",
+]
+
+[profile.release]
+lto = true
+opt-level = "z"
+codegen-units = 1

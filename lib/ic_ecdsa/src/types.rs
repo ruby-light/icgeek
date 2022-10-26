@@ -7,12 +7,6 @@ pub type EcdsaDerivationPath = Vec<Vec<u8>>;
 pub type EcdsaKeyCompact = Vec<u8>;
 pub type EcdsaSignatureCompact = Vec<u8>;
 
-// #[derive(CandidType, Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-// pub struct EcdsaKeyWrapper {
-//     pub key: EcdsaKeyCompact,
-//     pub derivation_path: EcdsaDerivationPath,
-// }
-
 #[derive(CandidType, Serialize, Debug, Clone)]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]

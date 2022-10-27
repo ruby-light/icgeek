@@ -1,5 +1,5 @@
 [package]
-name = "icgeek_ic_call_client"
+name = "icgeek_ic_call_backend"
 version = "0.1.0"
 edition = "2021"
 description = "Library for execute internet computer calls."
@@ -10,12 +10,22 @@ repository = "https://github.com/ruby-light/icgeek.git"
 
 [dependencies]
 icgeek_ic_call_api = "0.1.0"
-ic-agent = "0.22.0"
-garcon = "0.2.3"
-serde = { version = "1.0.147", features = ["derive"] }
+candid = "0.8.3"
+serde = "1.0.147"
 serde_bytes = "0.11.7"
-serde_cbor = "0.11.2"
+ic-types = "0.6.0"
+thiserror = "1.0.37"
+async-trait = "0.1.58"
+hex = "0.4.3"
+sha2 = "0.10.6"
+sec1 = {version = "0.2.1", features = ["alloc"]}
 leb128 = "0.2.5"
+serde_cbor = "0.11.2"
+
+[dev-dependencies]
+actix-rt = "*"
+secp256k1 = {version = "0.21.3", features = ["bitcoin_hashes"]}
+
 
 
 

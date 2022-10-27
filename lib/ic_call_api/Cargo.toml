@@ -1,8 +1,8 @@
 [package]
-name = "icgeek_ic_ecdsa"
+name = "icgeek_ic_call_api"
 version = "0.1.0"
 edition = "2021"
-description = "Library for access to icdsa sing."
+description = "Library for execute internet computer calls."
 license = "MIT"
 repository = "https://github.com/ruby-light/icgeek.git"
 
@@ -10,8 +10,9 @@ repository = "https://github.com/ruby-light/icgeek.git"
 
 [dependencies]
 candid = "0.8.3"
-ic-cdk = "0.6.1"
 serde = "1.0.147"
+
+
 
 
 

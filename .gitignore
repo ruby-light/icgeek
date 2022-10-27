@@ -14,5 +14,3 @@
 # rust
 target/
 *.lock
-
-lib/ic_call/

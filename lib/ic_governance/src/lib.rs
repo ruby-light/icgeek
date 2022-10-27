@@ -81,7 +81,7 @@ pub enum DissolveState {
     WhenDissolvedTimestampSeconds(u64),
 }
 
-#[warn(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant)]
 #[allow(non_camel_case_types)]
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub enum Result_2 {

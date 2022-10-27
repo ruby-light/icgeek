@@ -1,7 +1,8 @@
 [workspace]
 members = [
-    "lib/ic_ecdsa",
-#    "lib/ic_call",
+    "lib/ic_call_api",
+    "lib/ic_call_backend",
+    "lib/ic_call_client",
     "lib/ic_ledger",
     "lib/ic_identity",
     "lib/ic_governance",

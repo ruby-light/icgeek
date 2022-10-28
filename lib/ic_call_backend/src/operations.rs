@@ -13,27 +13,31 @@ use icgeek_ic_call_api::{AgentCallRequest, AgentQueryRequest};
 use serde::Serialize;
 use std::time::Duration;
 
-pub async fn create_query_request(
-    signer: &dyn Signer,
+pub trait RequestCtx {
+    fn get_ingress_expiry(&self) -> IngressExpiryDatetimeNanos;
+    fn get_delegation(&self) -> Option<(DeviceKey, SignedDelegation)>;
+}
+
+pub async fn create_query_request<C: RequestCtx>(
+    ctx: &C,
+    signer: &dyn Signer<C>,
     canister_id: &Principal,
     method_name: &str,
     arg: Vec<u8>,
-    ingress_expiry: IngressExpiryDatetimeNanos,
-    delegation: Option<(DeviceKey, SignedDelegation)>,
 ) -> Result<AgentQueryRequest, String> {
-    let (public_key, signed_delegation) = detect_public_key_and_delegations(signer, delegation);
+    let (public_key, signed_delegation) = detect_public_key_and_delegations(signer, ctx);
 
     let sender = Principal::self_authenticating(&public_key);
 
     // query request sign
 
     let request =
-        build_query_request(&sender, canister_id, method_name, arg, ingress_expiry).await?;
+        build_query_request(&sender, canister_id, method_name, arg, ctx.get_ingress_expiry()).await?;
 
     let request_id = to_request_id(&request).map_err(|e| std::format!("{:?}", e))?;
 
     let message_hash = construct_sign_message_hash(&request_id);
-    let sign_result = signer.sign(&message_hash).await?;
+    let sign_result = signer.sign(ctx, &message_hash).await?;
     let request_sign = serialize_envelope(
         public_key.clone(),
         signed_delegation.clone(),
@@ -47,16 +51,15 @@ pub async fn create_query_request(
     })
 }
 
-pub async fn create_call_request(
+pub async fn create_call_request<C: RequestCtx>(
+    ctx: &C,
+    signer: &dyn Signer<C>,
     rand_generator: &dyn RandGenerator,
-    signer: &dyn Signer,
     canister_id: &Principal,
     method_name: &str,
     arg: Vec<u8>,
-    ingress_expiry: IngressExpiryDatetimeNanos,
-    delegation: Option<(DeviceKey, SignedDelegation)>,
 ) -> Result<AgentCallRequest, String> {
-    let (public_key, signed_delegation) = detect_public_key_and_delegations(signer, delegation);
+    let (public_key, signed_delegation) = detect_public_key_and_delegations(signer, ctx);
 
     let sender = Principal::self_authenticating(&public_key);
 
@@ -68,14 +71,14 @@ pub async fn create_call_request(
         canister_id,
         method_name,
         arg,
-        ingress_expiry,
+        ctx.get_ingress_expiry(),
     )
-    .await?;
+        .await?;
 
     let request_id = to_request_id(&request).map_err(|e| std::format!("{:?}", e))?;
 
     let message_hash = construct_sign_message_hash(&request_id);
-    let sign_result = signer.sign(&message_hash).await?;
+    let sign_result = signer.sign(ctx, &message_hash).await?;
     let request_sign = serialize_envelope(
         public_key.clone(),
         signed_delegation.clone(),
@@ -85,12 +88,12 @@ pub async fn create_call_request(
 
     // read state request sign
 
-    let rs_request = build_read_state_request(sender, &request_id, ingress_expiry);
+    let rs_request = build_read_state_request(sender, &request_id, ctx.get_ingress_expiry());
 
     let rs_request_id = to_request_id(&rs_request).map_err(|e| std::format!("{:?}", e))?;
 
     let rs_message_hash = construct_sign_message_hash(&rs_request_id);
-    let rs_sign_result = signer.sign(&rs_message_hash).await?;
+    let rs_sign_result = signer.sign(ctx, &rs_message_hash).await?;
     let read_state_request_sign =
         serialize_envelope(public_key, signed_delegation, rs_sign_result, &rs_request)?;
 
@@ -102,15 +105,12 @@ pub async fn create_call_request(
     })
 }
 
-fn detect_public_key_and_delegations(
-    signer: &dyn Signer,
-    delegation: Option<(DeviceKey, SignedDelegation)>,
-) -> (DeviceKey, Option<Vec<SignedDelegation>>) {
-    delegation
+fn detect_public_key_and_delegations<C: RequestCtx>(signer: &dyn Signer<C>, ctx: &C) -> (DeviceKey, Option<Vec<SignedDelegation>>) {
+    ctx.get_delegation()
         .map(|(k, d)| (k, Some(vec![d])))
         .unwrap_or_else(|| {
             (
-                public_key_to_asn1_block(signer.get_uncompressed_public_key().as_slice()),
+                public_key_to_asn1_block(signer.get_uncompressed_public_key(ctx).as_slice()),
                 None,
             )
         })
@@ -179,6 +179,7 @@ fn build_read_state_request(
         ingress_expiry,
     }
 }
+
 fn construct_sign_message_hash(request_id: &RequestId) -> MessageHash {
     get_sha256(construct_message(request_id))
 }
@@ -198,8 +199,8 @@ fn serialize_envelope<'a, V>(
     signature: EcdsaSignatureCompact,
     request: &V,
 ) -> Result<Vec<u8>, String>
-where
-    V: 'a + Serialize,
+    where
+        V: 'a + Serialize,
 {
     let envelope = Envelope {
         content: request,
@@ -229,21 +230,23 @@ mod tests {
     use candid::{Encode, Principal};
     use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
 
-    struct DevSigner {
+    struct Ctx {
         pub key: Vec<u8>,
     }
 
+    struct DevSigner;
+
     #[async_trait]
-    impl Signer for DevSigner {
-        fn get_uncompressed_public_key(&self) -> UncompressedPublicKey {
+    impl Signer<Ctx> for DevSigner {
+        fn get_uncompressed_public_key(&self, ctx: &Ctx) -> UncompressedPublicKey {
             let secp = Secp256k1::new();
-            let secret_key = SecretKey::from_slice(self.key.as_slice()).unwrap();
+            let secret_key = SecretKey::from_slice(ctx.key.as_slice()).unwrap();
             PublicKey::from_secret_key(&secp, &secret_key).serialize_uncompressed()
         }
 
-        async fn sign(&self, message_hash: &MessageHash) -> Result<EcdsaSignatureCompact, String> {
+        async fn sign(&self, ctx: &Ctx, message_hash: &MessageHash) -> Result<EcdsaSignatureCompact, String> {
             let secp = Secp256k1::new();
-            let secret_key = SecretKey::from_slice(self.key.as_slice()).unwrap();
+            let secret_key = SecretKey::from_slice(ctx.key.as_slice()).unwrap();
             let message = Message::from_slice(message_hash).unwrap();
             let sig = secp.sign_ecdsa(&message, &secret_key);
             Ok(sig.serialize_compact().to_vec())
@@ -270,9 +273,9 @@ mod tests {
             231, 51, 148, 2, 77, 42, 30, 223, 56, 16, 112, 34, 160,
         ];
 
-        let signer = DevSigner { key: ecdsa_key };
-
-        let public_key = signer.get_uncompressed_public_key();
+        let signer = DevSigner {};
+        let ctx = Ctx { key: ecdsa_key };
+        let public_key = signer.get_uncompressed_public_key(&ctx);
         let asn1_public_key = public_key_to_asn1_block(public_key.as_slice());
         assert_eq!(
             asn1_public_key,
@@ -281,7 +284,7 @@ mod tests {
                 0, 4, 5, 152, 51, 190, 30, 224, 35, 167, 57, 223, 222, 218, 186, 83, 126, 201, 62,
                 122, 65, 209, 117, 183, 41, 170, 168, 69, 160, 29, 28, 82, 231, 64, 18, 68, 135,
                 212, 180, 77, 130, 128, 9, 92, 52, 17, 82, 49, 118, 254, 131, 19, 172, 103, 133,
-                128, 208, 241, 53, 166, 208, 179, 96, 25, 223, 107
+                128, 208, 241, 53, 166, 208, 179, 96, 25, 223, 107,
             ]
         );
         let sender = Principal::self_authenticating(&asn1_public_key);
@@ -300,8 +303,8 @@ mod tests {
             arg.clone(),
             0,
         )
-        .await
-        .unwrap();
+            .await
+            .unwrap();
         let request_id = to_request_id(&call_request).unwrap();
         let slice = [
             91, 75, 248, 199, 110, 203, 69, 241, 119, 49, 204, 87, 118, 182, 175, 64, 135, 81, 233,
@@ -334,7 +337,7 @@ mod tests {
                 179, 96, 25, 223, 107, 106, 115, 101, 110, 100, 101, 114, 95, 115, 105, 103, 88,
                 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ]
         );
     }

@@ -7,6 +7,7 @@ members = [
     "lib/ic_ledger",
     "lib/ic_identity",
     "lib/ic_governance",
+    "lib/ic_cycles",
 ]
 
 [profile.release]

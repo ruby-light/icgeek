@@ -1,0 +1,16 @@
+[package]
+name = "icgeek_ic_cycles"
+version = "0.1.0"
+edition = "2021"
+description = "Library for access to cycles."
+license = "MIT"
+repository = "https://github.com/ruby-light/icgeek.git"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = "0.8.3"
+serde = "1.0.147"
+serde_bytes = "0.11.7"
+ic-cdk = "0.6.4"
+

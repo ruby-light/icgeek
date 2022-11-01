@@ -1,5 +1,5 @@
 [package]
-name = "candid_gen"
+name = "icgeek_candid_gen"
 version = "0.1.0"
 edition = "2021"
 description = "Macros for generate candid interface."

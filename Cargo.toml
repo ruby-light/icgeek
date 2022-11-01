@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "lib/candid_gen",
     "lib/ic_call_api",
     "lib/ic_call_backend",
     "lib/ic_call_client",

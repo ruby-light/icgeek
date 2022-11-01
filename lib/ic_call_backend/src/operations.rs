@@ -31,8 +31,14 @@ pub async fn create_query_request<C: RequestCtx>(
 
     // query request sign
 
-    let request =
-        build_query_request(&sender, canister_id, method_name, arg, ctx.get_ingress_expiry()).await?;
+    let request = build_query_request(
+        &sender,
+        canister_id,
+        method_name,
+        arg,
+        ctx.get_ingress_expiry(),
+    )
+    .await?;
 
     let request_id = to_request_id(&request).map_err(|e| std::format!("{:?}", e))?;
 
@@ -73,7 +79,7 @@ pub async fn create_call_request<C: RequestCtx>(
         arg,
         ctx.get_ingress_expiry(),
     )
-        .await?;
+    .await?;
 
     let request_id = to_request_id(&request).map_err(|e| std::format!("{:?}", e))?;
 
@@ -105,7 +111,10 @@ pub async fn create_call_request<C: RequestCtx>(
     })
 }
 
-fn detect_public_key_and_delegations<C: RequestCtx>(signer: &dyn Signer<C>, ctx: &C) -> (DeviceKey, Option<Vec<SignedDelegation>>) {
+fn detect_public_key_and_delegations<C: RequestCtx>(
+    signer: &dyn Signer<C>,
+    ctx: &C,
+) -> (DeviceKey, Option<Vec<SignedDelegation>>) {
     ctx.get_delegation()
         .map(|(k, d)| (k, Some(vec![d])))
         .unwrap_or_else(|| {
@@ -199,8 +208,8 @@ fn serialize_envelope<'a, V>(
     signature: EcdsaSignatureCompact,
     request: &V,
 ) -> Result<Vec<u8>, String>
-    where
-        V: 'a + Serialize,
+where
+    V: 'a + Serialize,
 {
     let envelope = Envelope {
         content: request,
@@ -244,7 +253,11 @@ mod tests {
             PublicKey::from_secret_key(&secp, &secret_key).serialize_uncompressed()
         }
 
-        async fn sign(&self, ctx: &Ctx, message_hash: &MessageHash) -> Result<EcdsaSignatureCompact, String> {
+        async fn sign(
+            &self,
+            ctx: &Ctx,
+            message_hash: &MessageHash,
+        ) -> Result<EcdsaSignatureCompact, String> {
             let secp = Secp256k1::new();
             let secret_key = SecretKey::from_slice(ctx.key.as_slice()).unwrap();
             let message = Message::from_slice(message_hash).unwrap();
@@ -303,8 +316,8 @@ mod tests {
             arg.clone(),
             0,
         )
-            .await
-            .unwrap();
+        .await
+        .unwrap();
         let request_id = to_request_id(&call_request).unwrap();
         let slice = [
             91, 75, 248, 199, 110, 203, 69, 241, 119, 49, 204, 87, 118, 182, 175, 64, 135, 81, 233,

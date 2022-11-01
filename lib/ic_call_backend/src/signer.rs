@@ -8,5 +8,9 @@ pub type EcdsaSignatureCompact = Vec<u8>;
 pub trait Signer<C>: Sync + Send {
     fn get_uncompressed_public_key(&self, ctx: &C) -> UncompressedPublicKey;
 
-    async fn sign(&self, ctx: &C, message_hash: &MessageHash) -> Result<EcdsaSignatureCompact, String>;
+    async fn sign(
+        &self,
+        ctx: &C,
+        message_hash: &MessageHash,
+    ) -> Result<EcdsaSignatureCompact, String>;
 }

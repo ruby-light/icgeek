@@ -1,0 +1,16 @@
+[package]
+name = "candid_gen"
+version = "0.1.0"
+edition = "2021"
+description = "Macros for generate candid interface."
+license = "MIT"
+repository = "https://github.com/ruby-light/icgeek.git"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quote = "1.0.21"
+syn = "1.0.103"
+
+[lib]
+proc-macro = true

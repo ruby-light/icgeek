@@ -46,9 +46,7 @@ pub fn generate_update_candid_method(input: TokenStream) -> TokenStream {
         quote! { _: #canister_name::#method_name::#args_name }
     };
 
-    let response_name = if response_name == "None" {
-        quote! {}
-    } else if response_name == "Stub" {
+    let response_name = if response_name == "Stub" {
         quote! { -> () }
     } else {
         quote! { -> #canister_name::#method_name::#response_name }
@@ -81,9 +79,7 @@ pub fn generate_query_candid_method(input: TokenStream) -> TokenStream {
         quote! { _: #canister_name::#method_name::#args_name }
     };
 
-    let response_name = if response_name == "None" {
-        quote! {}
-    } else if response_name == "Stub" {
+    let response_name = if response_name == "Stub" {
         quote! { -> () }
     } else {
         quote! { -> #canister_name::#method_name::#response_name }

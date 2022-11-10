@@ -72,8 +72,8 @@ pub fn withdraw_account(account: String, tokens: u64) -> Result<u64, u64> {
 }
 
 pub fn visit_accounts<F>(visitor: F)
-    where
-        F: Fn(&String, &u64),
+where
+    F: Fn(&String, &u64),
 {
     for (account, balance) in get_storage().iter() {
         visitor(account, balance);
@@ -86,15 +86,30 @@ mod tests {
 
     #[test]
     fn test() {
-        assert_eq!(0, get_account_balance("contract_transfer_account".to_owned()));
+        assert_eq!(
+            0,
+            get_account_balance("contract_transfer_account".to_owned())
+        );
         deposit_account("contract_transfer_account".to_owned(), 20_000);
 
-        assert_eq!(20_000, get_account_balance("contract_transfer_account".to_owned()));
+        assert_eq!(
+            20_000,
+            get_account_balance("contract_transfer_account".to_owned())
+        );
 
-        assert_eq!(Err(20_000), withdraw_account("contract_transfer_account".to_owned(), 20_001));
+        assert_eq!(
+            Err(20_000),
+            withdraw_account("contract_transfer_account".to_owned(), 20_001)
+        );
 
-        assert_eq!(Ok(2_000), withdraw_account("contract_transfer_account".to_owned(), 18_000));
+        assert_eq!(
+            Ok(2_000),
+            withdraw_account("contract_transfer_account".to_owned(), 18_000)
+        );
 
-        assert_eq!(2_000, get_account_balance("contract_transfer_account".to_owned()));
+        assert_eq!(
+            2_000,
+            get_account_balance("contract_transfer_account".to_owned())
+        );
     }
 }

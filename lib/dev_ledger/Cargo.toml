@@ -9,8 +9,6 @@ repository = "https://github.com/ruby-light/icgeek.git"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.8.3"
-serde = "1.0.147"
 
 
 

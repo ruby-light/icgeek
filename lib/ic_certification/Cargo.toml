@@ -1,0 +1,23 @@
+[package]
+name = "icgeek_ic_certification"
+version = "0.1.0"
+edition = "2021"
+description = "Library for working with IC certification."
+license = "MIT"
+repository = "https://github.com/ruby-light/icgeek.git"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = "0.8.4"
+serde = "1.0.151"
+serde_cbor = "0.11.2"
+ic-certification = "0.23.0"
+ic-verify-bls-signature = "0.1.0"
+
+
+
+
+
+
+

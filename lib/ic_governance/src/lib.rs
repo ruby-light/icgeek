@@ -73,6 +73,9 @@ pub struct Neuron {
     pub followees: Vec<(i32, Followees)>,
     pub neuron_fees_e8s: u64,
     pub transfer: Option<NeuronStakeTransfer>,
+    pub staked_maturity_e8s_equivalent: Option<u64>,
+    pub auto_stake_maturity: Option<bool>,
+    pub spawn_at_timestamp_seconds: Option<u64>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

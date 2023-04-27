@@ -231,3 +231,15 @@ pub struct ManageNeuron {
 pub struct ManageNeuronResponse {
     pub command: Option<Command_1>,
 }
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct ListNeurons {
+    pub neuron_ids: Vec<u64>,
+    pub include_neurons_readable_by_caller: bool,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct ListNeuronsResponse {
+    // pub neuron_infos: Vec<NeuronInfos>,
+    pub full_neurons: Vec<Neuron>,
+}

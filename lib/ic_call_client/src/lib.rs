@@ -1,11 +1,12 @@
-use garcon::Waiter;
+use backoff::backoff::Backoff;
+use backoff::ExponentialBackoffBuilder;
 use ic_agent::agent::http_transport::ReqwestHttpReplicaV2Transport;
-use ic_agent::agent::{PollResult, Replied, RequestStatusResponse};
+use ic_agent::agent::{
+    PollResult, RejectCode, RejectResponse, Replied, RequestStatusResponse, Transport,
+};
 use ic_agent::export::Principal;
 use ic_agent::hash_tree::LookupResult;
-use ic_agent::{
-    agent::ReplicaV2Transport, lookup_value, Agent, AgentError, Certificate, RequestId,
-};
+use ic_agent::{lookup_value, Agent, AgentError, Certificate, RequestId};
 use icgeek_ic_call_api::{
     AgentCallRequest, AgentCallResponseData, AgentQueryRequest, AgentRequest,
 };
@@ -32,15 +33,19 @@ async fn perform_query(
         .query(request.canister_id, request.request_sign)
         .await?;
 
-    match (serde_cbor::from_slice(response.as_slice()) as serde_cbor::Result<QueryResponse>)? {
+    match (serde_cbor::from_slice(response.as_slice()) as serde_cbor::Result<QueryResponse>).map_err(AgentError::InvalidCborData)? {
         QueryResponse::Replied { reply } => Ok(reply.arg),
-        QueryResponse::Rejected {
-            reject_code,
-            reject_message,
-        } => Err(AgentError::ReplicaError {
-            reject_code,
-            reject_message,
-        }),
+        QueryResponse::Rejected(response) => {
+            Err(AgentError::ReplicaError(response))
+        }
+        // QueryResponse::Rejected {
+        //     reject_code,
+        //     reject_message,
+        // } => Err(AgentError::ReplicaError(RejectResponse {
+        //     reject_code: RejectCode::try_from(reject_code).unwrap(),
+        //     reject_message,
+        //     error_code: None,
+        // })),
     }
 }
 
@@ -61,7 +66,7 @@ async fn perform_call(
         &request_id,
         request.canister_id,
         &request.read_state_request_sign,
-        create_waiter(),
+        // create_waiter(),
     )
     .await
 }
@@ -71,23 +76,31 @@ fn build_request_id(request: &AgentCallRequest) -> RequestId {
     request_id.copy_from_slice(request.request_id.as_slice());
     RequestId::new(&request_id)
 }
+//
+// fn create_waiter() -> garcon::Delay {
+//     garcon::Delay::builder()
+//         .throttle(Duration::from_millis(500))
+//         .timeout(Duration::from_secs(60 * 5))
+//         .build()
+// }
+//
 
-fn create_waiter() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(Duration::from_millis(500))
-        .timeout(Duration::from_secs(60 * 5))
-        .build()
-}
-
-async fn wait<W: Waiter>(
+async fn wait(
     agent: &Agent,
     transport: &ReqwestHttpReplicaV2Transport,
     request_id: &RequestId,
     effective_canister_id: Principal,
     serialized_bytes: &[u8],
-    mut waiter: W,
+    // mut waiter: W,
 ) -> Result<Vec<u8>, AgentError> {
-    waiter.start();
+    let mut retry_policy = ExponentialBackoffBuilder::new()
+        .with_initial_interval(Duration::from_millis(500))
+        .with_max_interval(Duration::from_secs(1))
+        .with_multiplier(1.4)
+        .with_max_elapsed_time(Some(Duration::from_secs(60 * 5)))
+        .build();
+
+    // waiter.start();
     let mut request_accepted = false;
     loop {
         match poll(
@@ -109,19 +122,43 @@ async fn wait<W: Waiter>(
                     // instantaneous. Therefore, once we know the request is accepted,
                     // we should restart the waiter so the request does not time out.
 
-                    waiter
-                        .restart()
-                        .map_err(|_| AgentError::WaiterRestartError())?;
+                    retry_policy.reset();
+                    // waiter
+                    //     .restart()
+                    //     .map_err(|_| AgentError::TimeoutWaitingForResponse())?;
                     request_accepted = true;
                 }
             }
             PollResult::Completed(result) => return Ok(result),
         };
 
-        waiter
-            .async_wait()
-            .await
-            .map_err(|_| AgentError::TimeoutWaitingForResponse())?;
+        match retry_policy.next_backoff() {
+            #[cfg(not(target_family = "wasm"))]
+            Some(duration) => tokio::time::sleep(duration).await,
+            #[cfg(all(target_family = "wasm", feature = "wasm-bindgen"))]
+            Some(duration) => {
+                wasm_bindgen_futures::JsFuture::from(js_sys::Promise::new(&mut |rs, rj| {
+                    if let Err(e) = web_sys::window()
+                        .expect("global window unavailable")
+                        .set_timeout_with_callback_and_timeout_and_arguments_0(
+                            &rs,
+                            duration.as_millis() as _,
+                        )
+                    {
+                        use wasm_bindgen::UnwrapThrowExt;
+                        rj.call1(&rj, &e).unwrap_throw();
+                    }
+                }))
+                .await
+                .expect("unable to setTimeout");
+            }
+            None => return Err(AgentError::TimeoutWaitingForResponse()),
+        }
+        //
+        // waiter
+        //     .async_wait()
+        //     .await
+        //     .map_err(|_| AgentError::TimeoutWaitingForResponse())?;
     }
 }
 
@@ -151,13 +188,8 @@ async fn poll(
             reply: Replied::CallReplied(arg),
         } => Ok(PollResult::Completed(arg)),
 
-        RequestStatusResponse::Rejected {
-            reject_code,
-            reject_message,
-        } => Err(AgentError::ReplicaError {
-            reject_code,
-            reject_message,
-        }),
+        RequestStatusResponse::Rejected(response) => Err(AgentError::ReplicaError(response)),
+
         RequestStatusResponse::Done => Err(AgentError::RequestStatusDoneNoReply(String::from(
             *request_id,
         ))),
@@ -186,7 +218,7 @@ async fn read_state_raw(
     transport: &ReqwestHttpReplicaV2Transport,
     effective_canister_id: Principal,
     serialized_bytes: Vec<u8>,
-) -> Result<Certificate<'static>, AgentError> {
+) -> Result<Certificate, AgentError> {
     let read_state_response: ReadStateResponse =
         read_state_endpoint(transport, effective_canister_id, serialized_bytes).await?;
 
@@ -221,7 +253,7 @@ fn lookup_request_status(
         "status".into(),
     ];
     match certificate.tree.lookup_path(&path_status) {
-        LookupResult::Absent => Err(LookupPathAbsent(path_status.into())),
+        LookupResult::Absent => Ok(RequestStatusResponse::Unknown),
         LookupResult::Unknown => Ok(RequestStatusResponse::Unknown),
         LookupResult::Found(status) => match from_utf8(status)? {
             "done" => Ok(RequestStatusResponse::Done),
@@ -242,24 +274,26 @@ fn lookup_rejection(
     let reject_code = lookup_reject_code(certificate, request_id)?;
     let reject_message = lookup_reject_message(certificate, request_id)?;
 
-    Ok(RequestStatusResponse::Rejected {
+    Ok(RequestStatusResponse::Rejected(RejectResponse {
         reject_code,
         reject_message,
-    })
+        error_code: None,
+    }))
 }
 
-fn lookup_reject_code(
+pub(crate) fn lookup_reject_code(
     certificate: &Certificate,
     request_id: &RequestId,
-) -> Result<u64, AgentError> {
+) -> Result<RejectCode, AgentError> {
     let path = [
-        "request_status".into(),
-        request_id.as_slice().to_vec().into(),
-        "reject_code".into(),
+        "request_status".as_bytes(),
+        request_id.as_slice(),
+        "reject_code".as_bytes(),
     ];
     let code = lookup_value(certificate, path)?;
     let mut readable = code;
-    Ok(leb128::read::unsigned(&mut readable)?)
+    let code_digit = leb128::read::unsigned(&mut readable)?;
+    RejectCode::try_from(code_digit)
 }
 
 pub(crate) fn lookup_reject_message(
@@ -267,9 +301,9 @@ pub(crate) fn lookup_reject_message(
     request_id: &RequestId,
 ) -> Result<String, AgentError> {
     let path = [
-        "request_status".into(),
-        request_id.as_slice().to_vec().into(),
-        "reject_message".into(),
+        "request_status".as_bytes(),
+        request_id.as_slice(),
+        "reject_message".as_bytes(),
     ];
     let msg = lookup_value(certificate, path)?;
     Ok(from_utf8(msg)?.to_string())
@@ -280,29 +314,44 @@ pub(crate) fn lookup_reply(
     request_id: &RequestId,
 ) -> Result<RequestStatusResponse, AgentError> {
     let path = [
-        "request_status".into(),
-        request_id.as_slice().to_vec().into(),
-        "reply".into(),
+        "request_status".as_bytes(),
+        request_id.as_slice(),
+        "reply".as_bytes(),
     ];
     let reply_data = lookup_value(certificate, path)?;
     let reply = Replied::CallReplied(Vec::from(reply_data));
     Ok(RequestStatusResponse::Replied { reply })
 }
 
-#[derive(Debug, Clone, Deserialize)]
+// #[derive(Debug, Clone, Deserialize)]
+// pub struct CallReply {
+//     #[serde(with = "serde_bytes")]
+//     pub arg: Vec<u8>,
+// }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallReply {
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+//
+// #[derive(Debug, Clone, Deserialize)]
+// #[serde(tag = "status")]
+// pub enum QueryResponse {
+//     #[serde(rename = "replied")]
+//     Replied { reply: CallReply },
+//     #[serde(rename = "rejected")]
+//     Rejected {
+//         reject_code: u64,
+//         reject_message: String,
+//     },
+// }
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "status")]
 pub enum QueryResponse {
     #[serde(rename = "replied")]
     Replied { reply: CallReply },
     #[serde(rename = "rejected")]
-    Rejected {
-        reject_code: u64,
-        reject_message: String,
-    },
+    Rejected(RejectResponse),
 }

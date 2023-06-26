@@ -1,6 +1,6 @@
 [package]
 name = "icgeek_ic_call_client"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Library for execute internet computer calls."
 license = "MIT"
@@ -10,12 +10,14 @@ repository = "https://github.com/ruby-light/icgeek.git"
 
 [dependencies]
 icgeek_ic_call_api = "0.1.0"
-ic-agent = "0.22.0"
-garcon = "0.2.3"
+ic-agent = "0.24.1"
+#garcon = "0.2.3"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
 serde_cbor = "0.11.2"
 leb128 = "0.2.5"
+backoff = "0.4.0"
+tokio = "1.28.2"
 
 
 

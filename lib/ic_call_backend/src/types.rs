@@ -1,5 +1,5 @@
 use candid::{CandidType, Principal};
-use ic_types::hash_tree::Label;
+use ic_certification::Label;
 use serde::{Deserialize, Serialize};
 
 pub type DeviceKey = Vec<u8>;

@@ -8,7 +8,7 @@ use crate::types::{
     ReadStateContent, SignedDelegation,
 };
 use candid::Principal;
-use ic_types::hash_tree::Label;
+use ic_certification::Label;
 use icgeek_ic_call_api::{AgentCallRequest, AgentQueryRequest};
 use serde::Serialize;
 use std::time::Duration;

@@ -9,7 +9,7 @@ repository = "https://github.com/ruby-light/icgeek.git"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-icgeek_ic_call_api = { path = "../ic_call_api" }
+icgeek_ic_call_api = "0.2.0"
 candid = "0.9.3"
 serde = "1.0.147"
 serde_bytes = "0.11.7"

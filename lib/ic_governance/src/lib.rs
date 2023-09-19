@@ -69,6 +69,7 @@ pub struct Neuron {
     pub aging_since_timestamp_seconds: u64,
     pub hot_keys: Vec<Principal>,
     pub account: Vec<u8>,
+    pub joined_community_fund_timestamp_seconds: Option<u64>,
     pub dissolve_state: Option<DissolveState>,
     pub followees: Vec<(i32, Followees)>,
     pub neuron_fees_e8s: u64,

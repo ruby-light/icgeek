@@ -2,7 +2,7 @@
 name = "icgeek_ic_ledger"
 version = "0.1.0"
 edition = "2021"
-description = "Library for access to internet computer ledger."
+description = "DEPRECATED! Library for access to internet computer ledger."
 license = "MIT"
 repository = "https://github.com/ruby-light/icgeek.git"
 

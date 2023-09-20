@@ -16,7 +16,7 @@ pub fn verify_certified_data(
 
     let certified_data_path = [
         "canister".into(),
-        canister_id.into(),
+        Label::from_bytes(canister_id.as_slice()),
         "certified_data".into(),
     ];
 
@@ -41,7 +41,7 @@ pub fn verify_certified_data(
 pub fn verify_certificate<'a>(
     certificate: &'a [u8],
     root_pk: &'a [u8],
-) -> Result<Certificate<'a>, String> {
+) -> Result<Certificate, String> {
     let certificate: Certificate = parse_certificate(certificate)?;
     verify(root_pk.to_vec(), &certificate)?;
     Ok(certificate)
@@ -103,7 +103,7 @@ pub fn check_delegation(
     }
 }
 
-pub fn lookup_value<'a, P>(tree: &'a HashTree<'a>, path: P) -> Result<&'a [u8], String>
+pub fn lookup_value<'a, P>(tree: &'a HashTree, path: P) -> Result<&'a [u8], String>
 where
     for<'p> &'p P: IntoIterator<Item = &'p Label>,
     P: Into<Vec<Label>>,

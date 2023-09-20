@@ -4,6 +4,7 @@ members = [
     "lib/ic_call_api",
     "lib/ic_call_backend",
     "lib/ic_call_client",
+    "lib/ic_call_http",
     "lib/ic_ledger",
     "lib/ic_identity",
     "lib/ic_governance",

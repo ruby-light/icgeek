@@ -1,0 +1,26 @@
+[package]
+name = "icgeek_ic_call_http"
+version = "0.1.0"
+edition = "2021"
+description = "Library for execute internet computer calls."
+license = "MIT"
+repository = "https://github.com/ruby-light/icgeek.git"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+icgeek_ic_call_api = "0.2.0"
+icgeek_ic_call_backend = "0.2.0"
+candid = "0.9.3"
+ic-cdk = "0.10.0"
+serde = "1.0.147"
+serde_bytes = "0.11.7"
+serde_cbor = "0.11.2"
+serde_repr = "0.1.12"
+thiserror = "1.0.44"
+ic-certification = "0.25.0"
+ic-verify-bls-signature = "0.2.0"
+leb128 = "0.2.5"
+
+
+

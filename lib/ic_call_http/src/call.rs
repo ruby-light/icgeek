@@ -16,12 +16,15 @@ use std::str::from_utf8;
 pub async fn execute_ic_call<F>(
     ic_url: String,
     request: AgentCallRequest,
+    call_max_response_bytes: u64,
+    call_cycles: u128,
     transform_canister_id: Principal,
     transform_method: String,
     transformer_ctx: Vec<u8>,
-    max_response_bytes: u64,
     sleeper: Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()>>>>,
     read_state_transform_ctx_builder: F,
+    pool_max_response_bytes: u64,
+    pool_cycles: u128,
     ic_root_key: Vec<u8>,
 ) -> Result<AgentCallResponseData, AgentError>
 where
@@ -40,7 +43,8 @@ where
         transform_canister_id,
         transform_method.clone(),
         transformer_ctx,
-        1000,
+        call_max_response_bytes,
+        call_cycles,
     )
     .await?;
 
@@ -57,7 +61,8 @@ where
         transform_canister_id,
         transform_method,
         read_state_transformer_ctx,
-        max_response_bytes,
+        pool_max_response_bytes,
+        pool_cycles,
         ic_root_key,
     )
     .await?
@@ -84,6 +89,7 @@ async fn poll(
     transformer_method: String,
     transformer_ctx: Vec<u8>,
     max_response_bytes: u64,
+    cycles: u128,
     ic_root_key: Vec<u8>,
 ) -> Result<PollResult, AgentError> {
     match request_state(
@@ -95,6 +101,7 @@ async fn poll(
         transformer_method,
         transformer_ctx,
         max_response_bytes,
+        cycles,
         ic_root_key,
     )
     .await?
@@ -124,6 +131,7 @@ async fn request_state(
     transform_method: String,
     transformer_ctx: Vec<u8>,
     max_response_bytes: u64,
+    cycles: u128,
     ic_root_key: Vec<u8>,
 ) -> Result<RequestStatusResponse, AgentError> {
     let bytes = execute_ic_request(
@@ -135,6 +143,7 @@ async fn request_state(
         transform_method,
         transformer_ctx,
         max_response_bytes,
+        cycles,
     )
     .await?;
 

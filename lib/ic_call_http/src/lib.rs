@@ -25,6 +25,7 @@ pub(crate) async fn execute_ic_request(
     transform_method: String,
     transformer_ctx: Vec<u8>,
     max_response_bytes: u64,
+    cycles: u128,
 ) -> Result<Vec<u8>, AgentError> {
     let url = ic_url.add(endpoint);
 
@@ -48,7 +49,7 @@ pub(crate) async fn execute_ic_request(
         headers,
     };
 
-    match http_request(request, 0).await {
+    match http_request(request, cycles).await {
         //See:https://docs.rs/ic-cdk/latest/ic_cdk/api/management_canister/http_request/struct.HttpResponse.html
         Ok((response,)) => {
             let status: u16 = response.status.to_string().parse().unwrap();

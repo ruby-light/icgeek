@@ -1,9 +1,8 @@
-use crate::types::{AgentError, ReadStateResponse, RejectCode, RejectResponse};
-use crate::verify::lookup_value;
+use crate::types::{AgentError, ReadStateResponse};
 use crate::{deserialize_cbor_data, execute_ic_request};
 use candid::Principal;
 use ic_cdk::api::management_canister::http_request::HttpMethod;
-use ic_certification::{Certificate, LookupResult};
+use ic_certification::{Certificate, Label, LookupResult};
 use icgeek_ic_call_api::{AgentCallRequest, AgentCallResponseData};
 use std::future::Future;
 use std::pin::Pin;
@@ -105,127 +104,147 @@ pub fn get_certificate_from_state_response_body(
 
 pub fn get_reply_from_call_response_certificate(
     certificate: Certificate,
-    request_id: &Vec<u8>,
+    request_id: &[u8],
 ) -> Option<AgentCallResponseData> {
-    if let Ok(RequestStatusResponse::Replied {
-        reply: Replied::CallReplied(data),
-    }) = lookup_request_status(certificate, request_id)
-    {
-        Some(data)
-    } else {
-        None
-    }
-}
+    let path_status: [Label; 3] = ["request_status".into(), request_id.into(), "status".into()];
 
-pub fn lookup_request_status(
-    certificate: Certificate,
-    request_id: &Vec<u8>,
-) -> Result<RequestStatusResponse, AgentError> {
-    let path_status = [
-        "request_status".into(),
-        request_id.clone().into(),
-        "status".into(),
-    ];
+    if let LookupResult::Found(status) = certificate.tree.lookup_path(&path_status) {
+        if let Ok("replied") = from_utf8(status) {
+            let path_reply: [Label; 3] =
+                ["request_status".into(), request_id.into(), "reply".into()];
 
-    match certificate.tree.lookup_path(&path_status) {
-        LookupResult::Absent => Ok(RequestStatusResponse::Unknown),
-        LookupResult::Unknown => Ok(RequestStatusResponse::Unknown),
-        LookupResult::Found(status) => {
-            match from_utf8(status).map_err(AgentError::Utf8ReadError)? {
-                "done" => Ok(RequestStatusResponse::Done),
-                "processing" => Ok(RequestStatusResponse::Processing),
-                "received" => Ok(RequestStatusResponse::Received),
-                "rejected" => lookup_rejection(&certificate, request_id),
-                "replied" => lookup_reply(&certificate, request_id),
-                other => Err(AgentError::InvalidRequestStatus(
-                    path_status.into(),
-                    other.to_string(),
-                )),
+            if let LookupResult::Found(reply_data) = certificate.tree.lookup_path(&path_reply) {
+                return Some(Vec::from(reply_data));
             }
         }
-        LookupResult::Error => Err(AgentError::LookupPathError(path_status.into())),
     }
+
+    None
 }
 
-fn lookup_rejection(
-    certificate: &Certificate,
-    request_id: &Vec<u8>,
-) -> Result<RequestStatusResponse, AgentError> {
-    let reject_code = lookup_reject_code(certificate, request_id)?;
-    let reject_message = lookup_reject_message(certificate, request_id)?;
+// pub fn get_reply_from_call_response_certificate(
+//     certificate: Certificate,
+//     request_id: &Vec<u8>,
+// ) -> Option<AgentCallResponseData> {
+//     if let Ok(RequestStatusResponse::Replied {
+//         reply: Replied::CallReplied(data),
+//     }) = lookup_request_status(certificate, request_id)
+//     {
+//         Some(data)
+//     } else {
+//         None
+//     }
+// }
 
-    Ok(RequestStatusResponse::Rejected(RejectResponse {
-        reject_code,
-        reject_message,
-        error_code: None,
-    }))
-}
-
-fn lookup_reject_code(
-    certificate: &Certificate,
-    request_id: &Vec<u8>,
-) -> Result<RejectCode, AgentError> {
-    let path = [
-        "request_status".into(),
-        request_id.as_slice().to_vec().into(),
-        "reject_code".into(),
-    ];
-    let code = lookup_value(&certificate.tree, path)?;
-    let mut readable = code;
-    let code_digit = leb128::read::unsigned(&mut readable)
-        .map_err(|error| AgentError::Leb128ReadError(format!("{error:?}")))?;
-    RejectCode::try_from(code_digit).map_err(AgentError::Leb128ReadError)
-}
-
-fn lookup_reject_message(
-    certificate: &Certificate,
-    request_id: &Vec<u8>,
-) -> Result<String, AgentError> {
-    let path = [
-        "request_status".into(),
-        request_id.as_slice().to_vec().into(),
-        "reject_message".into(),
-    ];
-    let msg = lookup_value(&certificate.tree, path)?;
-    Ok(from_utf8(msg)
-        .map_err(AgentError::Utf8ReadError)?
-        .to_string())
-}
-
-fn lookup_reply(
-    certificate: &Certificate,
-    request_id: &Vec<u8>,
-) -> Result<RequestStatusResponse, AgentError> {
-    let path = [
-        "request_status".into(),
-        request_id.as_slice().to_vec().into(),
-        "reply".into(),
-    ];
-    let reply_data = lookup_value(&certificate.tree, path)?;
-    let reply = Replied::CallReplied(Vec::from(reply_data));
-    Ok(RequestStatusResponse::Replied { reply })
-}
-
-#[derive(Debug)]
-pub enum RequestStatusResponse {
-    /// The status of the request is unknown.
-    Unknown,
-    /// The request has been received, and will probably get processed.
-    Received,
-    /// The request is currently being processed.
-    Processing,
-    /// The request has been successfully replied to.
-    Replied {
-        /// The reply from the replica.
-        reply: Replied,
-    },
-    /// The request has been rejected.
-    Rejected(RejectResponse),
-    /// The call has been completed, and it has been long enough that the reply/reject data has been purged, but the call has not expired yet.
-    Done,
-}
-
-#[derive(Debug)]
-pub enum Replied {
-    CallReplied(Vec<u8>),
-}
+// pub fn lookup_request_status(
+//     certificate: Certificate,
+//     request_id: &Vec<u8>,
+// ) -> Result<RequestStatusResponse, AgentError> {
+//     let path_status = [
+//         "request_status".into(),
+//         request_id.clone().into(),
+//         "status".into(),
+//     ];
+//
+//     match certificate.tree.lookup_path(&path_status) {
+//         LookupResult::Absent => Ok(RequestStatusResponse::Unknown),
+//         LookupResult::Unknown => Ok(RequestStatusResponse::Unknown),
+//         LookupResult::Found(status) => {
+//             match from_utf8(status).map_err(AgentError::Utf8ReadError)? {
+//                 "done" => Ok(RequestStatusResponse::Done),
+//                 "processing" => Ok(RequestStatusResponse::Processing),
+//                 "received" => Ok(RequestStatusResponse::Received),
+//                 "rejected" => lookup_rejection(&certificate, request_id),
+//                 "replied" => lookup_reply(&certificate, request_id),
+//                 other => Err(AgentError::InvalidRequestStatus(
+//                     path_status.into(),
+//                     other.to_string(),
+//                 )),
+//             }
+//         }
+//         LookupResult::Error => Err(AgentError::LookupPathError(path_status.into())),
+//     }
+// }
+//
+// fn lookup_rejection(
+//     certificate: &Certificate,
+//     request_id: &Vec<u8>,
+// ) -> Result<RequestStatusResponse, AgentError> {
+//     let reject_code = lookup_reject_code(certificate, request_id)?;
+//     let reject_message = lookup_reject_message(certificate, request_id)?;
+//
+//     Ok(RequestStatusResponse::Rejected(RejectResponse {
+//         reject_code,
+//         reject_message,
+//         error_code: None,
+//     }))
+// }
+//
+// fn lookup_reject_code(
+//     certificate: &Certificate,
+//     request_id: &Vec<u8>,
+// ) -> Result<RejectCode, AgentError> {
+//     let path = [
+//         "request_status".into(),
+//         request_id.as_slice().to_vec().into(),
+//         "reject_code".into(),
+//     ];
+//     let code = lookup_value(&certificate.tree, path)?;
+//     let mut readable = code;
+//     let code_digit = leb128::read::unsigned(&mut readable)
+//         .map_err(|error| AgentError::Leb128ReadError(format!("{error:?}")))?;
+//     RejectCode::try_from(code_digit).map_err(AgentError::Leb128ReadError)
+// }
+//
+// fn lookup_reject_message(
+//     certificate: &Certificate,
+//     request_id: &Vec<u8>,
+// ) -> Result<String, AgentError> {
+//     let path = [
+//         "request_status".into(),
+//         request_id.as_slice().to_vec().into(),
+//         "reject_message".into(),
+//     ];
+//     let msg = lookup_value(&certificate.tree, path)?;
+//     Ok(from_utf8(msg)
+//         .map_err(AgentError::Utf8ReadError)?
+//         .to_string())
+// }
+//
+// fn lookup_reply(
+//     certificate: &Certificate,
+//     request_id: &Vec<u8>,
+// ) -> Result<RequestStatusResponse, AgentError> {
+//     let path = [
+//         "request_status".into(),
+//         request_id.as_slice().to_vec().into(),
+//         "reply".into(),
+//     ];
+//     let reply_data = lookup_value(&certificate.tree, path)?;
+//     let reply = Replied::CallReplied(Vec::from(reply_data));
+//     Ok(RequestStatusResponse::Replied { reply })
+// }
+//
+// #[derive(Debug)]
+// pub enum RequestStatusResponse {
+//     /// The status of the request is unknown.
+//     Unknown,
+//     /// The request has been received, and will probably get processed.
+//     Received,
+//     /// The request is currently being processed.
+//     Processing,
+//     /// The request has been successfully replied to.
+//     Replied {
+//         /// The reply from the replica.
+//         reply: Replied,
+//     },
+//     /// The request has been rejected.
+//     Rejected(RejectResponse),
+//     /// The call has been completed, and it has been long enough that the reply/reject data has been purged, but the call has not expired yet.
+//     Done,
+// }
+//
+// #[derive(Debug)]
+// pub enum Replied {
+//     CallReplied(Vec<u8>),
+// }

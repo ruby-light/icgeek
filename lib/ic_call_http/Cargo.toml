@@ -10,7 +10,6 @@ repository = "https://github.com/ruby-light/icgeek.git"
 
 [dependencies]
 icgeek_ic_call_api = "0.2.0"
-icgeek_ic_call_backend = "0.2.0"
 candid = "0.9.3"
 ic-cdk = "0.10.0"
 serde = "1.0.147"

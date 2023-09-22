@@ -4,6 +4,7 @@ use ic_cdk::api::management_canister::http_request::{
     http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };
+use serde::Serialize;
 use std::ops::Add;
 
 pub mod call;
@@ -16,7 +17,7 @@ pub use call::*;
 pub use query::*;
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn execute_ic_request(
+pub async fn execute_ic_request(
     ic_url: String,
     method: HttpMethod,
     endpoint: &str,
@@ -101,4 +102,16 @@ where
     A: serde::de::DeserializeOwned,
 {
     serde_cbor::from_slice(serialized_bytes).map_err(AgentError::InvalidCborData)
+}
+
+pub fn serialize_cbor_data<'a, V>(data: &V) -> Result<Vec<u8>, serde_cbor::Error>
+where
+    V: 'a + Serialize,
+{
+    let mut serialized_bytes = Vec::new();
+    let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+    serializer.self_describe()?;
+    data.serialize(&mut serializer)?;
+
+    Ok(serialized_bytes)
 }

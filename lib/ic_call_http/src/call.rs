@@ -1,13 +1,10 @@
-use crate::types::{
-    AgentError, ReadStateResponse, RejectCode, RejectResponse, Replied, RequestStatusResponse,
-};
-use crate::verify::{lookup_value, verify_state_response_certificate};
+use crate::types::{AgentError, ReadStateResponse, RejectCode, RejectResponse};
+use crate::verify::lookup_value;
 use crate::{deserialize_cbor_data, execute_ic_request};
 use candid::Principal;
 use ic_cdk::api::management_canister::http_request::HttpMethod;
 use ic_certification::{Certificate, LookupResult};
 use icgeek_ic_call_api::{AgentCallRequest, AgentCallResponseData};
-use icgeek_ic_call_backend::request_id::RequestId;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::from_utf8;
@@ -28,12 +25,14 @@ pub async fn execute_ic_call<F>(
     ic_root_key: Vec<u8>,
 ) -> Result<AgentCallResponseData, AgentError>
 where
-    F: FnOnce(Principal, RequestId) -> Vec<u8>,
+    F: FnOnce(Principal, Vec<u8>, Vec<u8>) -> Vec<u8>,
 {
-    let request_id = build_request_id(&request);
+    let request_id = request.request_id.clone();
 
     let effective_canister_id = request.canister_id;
     let envelope = request.request_sign;
+
+    // send call request
 
     execute_ic_request(
         ic_url.clone(),
@@ -48,13 +47,16 @@ where
     )
     .await?;
 
+    let read_state_transformer_ctx =
+        read_state_transform_ctx_builder(request.canister_id, request_id, ic_root_key);
+
+    // wait timeout while all replicas make calls
+
     sleeper().await;
 
-    let read_state_transformer_ctx =
-        read_state_transform_ctx_builder(request.canister_id, request_id);
+    // request reply from transformer
 
-    match poll(
-        &request_id,
+    request_response_data(
         ic_url,
         effective_canister_id,
         request.read_state_request_sign,
@@ -63,67 +65,12 @@ where
         read_state_transformer_ctx,
         pool_max_response_bytes,
         pool_cycles,
-        ic_root_key,
     )
-    .await?
-    {
-        PollResult::Completed(result) => Ok(result),
-        PollResult::Submitted => Err(AgentError::TimeoutWaitingForResponse()),
-        PollResult::Accepted => Err(AgentError::TimeoutWaitingForResponse()),
-    }
-}
-
-fn build_request_id(request: &AgentCallRequest) -> RequestId {
-    let mut request_id = [0_u8; 32];
-    request_id.copy_from_slice(request.request_id.as_slice());
-    RequestId::new(&request_id)
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn poll(
-    request_id: &RequestId,
-    ic_url: String,
-    effective_canister_id: Principal,
-    envelope: Vec<u8>,
-    transformer_canister_id: Principal,
-    transformer_method: String,
-    transformer_ctx: Vec<u8>,
-    max_response_bytes: u64,
-    cycles: u128,
-    ic_root_key: Vec<u8>,
-) -> Result<PollResult, AgentError> {
-    match request_state(
-        request_id,
-        ic_url,
-        effective_canister_id,
-        envelope,
-        transformer_canister_id,
-        transformer_method,
-        transformer_ctx,
-        max_response_bytes,
-        cycles,
-        ic_root_key,
-    )
-    .await?
-    {
-        RequestStatusResponse::Replied {
-            reply: Replied::CallReplied(arg),
-        } => Ok(PollResult::Completed(arg)),
-        RequestStatusResponse::Unknown => Ok(PollResult::Submitted),
-        RequestStatusResponse::Received | RequestStatusResponse::Processing => {
-            Ok(PollResult::Accepted)
-        }
-        RequestStatusResponse::Rejected(response) => Err(AgentError::ReplicaError(response)),
-        RequestStatusResponse::Done => Err(AgentError::RequestStatusDoneNoReply(format!(
-            "{:?}",
-            request_id
-        ))),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn request_state(
-    request_id: &RequestId,
+async fn request_response_data(
     ic_url: String,
     effective_canister_id: Principal,
     envelope: Vec<u8>,
@@ -132,9 +79,8 @@ async fn request_state(
     transformer_ctx: Vec<u8>,
     max_response_bytes: u64,
     cycles: u128,
-    ic_root_key: Vec<u8>,
-) -> Result<RequestStatusResponse, AgentError> {
-    let bytes = execute_ic_request(
+) -> Result<Vec<u8>, AgentError> {
+    execute_ic_request(
         ic_url,
         HttpMethod::POST,
         &format!("canister/{effective_canister_id}/read_state"),
@@ -145,23 +91,39 @@ async fn request_state(
         max_response_bytes,
         cycles,
     )
-    .await?;
+    .await
 
-    let read_state_response: ReadStateResponse = deserialize_cbor_data(&bytes)?;
+    // in transformer extract call response data
+}
 
-    let cert: Certificate = deserialize_cbor_data(&read_state_response.certificate)?;
-    verify_state_response_certificate(&cert, effective_canister_id, ic_root_key)?;
+pub fn get_certificate_from_state_response_body(
+    response_body: &[u8],
+) -> Result<Certificate, AgentError> {
+    let read_state_response: ReadStateResponse = deserialize_cbor_data(response_body)?;
+    deserialize_cbor_data(&read_state_response.certificate)
+}
 
-    lookup_request_status(cert, request_id)
+pub fn get_reply_from_call_response_certificate(
+    certificate: Certificate,
+    request_id: &Vec<u8>,
+) -> Option<AgentCallResponseData> {
+    if let Ok(RequestStatusResponse::Replied {
+        reply: Replied::CallReplied(data),
+    }) = lookup_request_status(certificate, request_id)
+    {
+        Some(data)
+    } else {
+        None
+    }
 }
 
 pub fn lookup_request_status(
     certificate: Certificate,
-    request_id: &RequestId,
+    request_id: &Vec<u8>,
 ) -> Result<RequestStatusResponse, AgentError> {
     let path_status = [
         "request_status".into(),
-        request_id.as_slice().to_vec().into(),
+        request_id.clone().into(),
         "status".into(),
     ];
 
@@ -187,7 +149,7 @@ pub fn lookup_request_status(
 
 fn lookup_rejection(
     certificate: &Certificate,
-    request_id: &RequestId,
+    request_id: &Vec<u8>,
 ) -> Result<RequestStatusResponse, AgentError> {
     let reject_code = lookup_reject_code(certificate, request_id)?;
     let reject_message = lookup_reject_message(certificate, request_id)?;
@@ -201,7 +163,7 @@ fn lookup_rejection(
 
 fn lookup_reject_code(
     certificate: &Certificate,
-    request_id: &RequestId,
+    request_id: &Vec<u8>,
 ) -> Result<RejectCode, AgentError> {
     let path = [
         "request_status".into(),
@@ -217,7 +179,7 @@ fn lookup_reject_code(
 
 fn lookup_reject_message(
     certificate: &Certificate,
-    request_id: &RequestId,
+    request_id: &Vec<u8>,
 ) -> Result<String, AgentError> {
     let path = [
         "request_status".into(),
@@ -232,7 +194,7 @@ fn lookup_reject_message(
 
 fn lookup_reply(
     certificate: &Certificate,
-    request_id: &RequestId,
+    request_id: &Vec<u8>,
 ) -> Result<RequestStatusResponse, AgentError> {
     let path = [
         "request_status".into(),
@@ -245,12 +207,25 @@ fn lookup_reply(
 }
 
 #[derive(Debug)]
-pub enum PollResult {
-    /// The request has been submitted, but we do not know yet if it
-    /// has been accepted or not.
-    Submitted,
-    /// The request has been received and may be processing.
-    Accepted,
-    /// The request completed and returned some data.
-    Completed(Vec<u8>),
+pub enum RequestStatusResponse {
+    /// The status of the request is unknown.
+    Unknown,
+    /// The request has been received, and will probably get processed.
+    Received,
+    /// The request is currently being processed.
+    Processing,
+    /// The request has been successfully replied to.
+    Replied {
+        /// The reply from the replica.
+        reply: Replied,
+    },
+    /// The request has been rejected.
+    Rejected(RejectResponse),
+    /// The call has been completed, and it has been long enough that the reply/reject data has been purged, but the call has not expired yet.
+    Done,
+}
+
+#[derive(Debug)]
+pub enum Replied {
+    CallReplied(Vec<u8>),
 }

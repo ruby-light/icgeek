@@ -1,5 +1,5 @@
-use crate::execute_ic_request;
 use crate::types::{AgentError, QueryResponse};
+use crate::{deserialize_cbor_data, execute_ic_request};
 use candid::Principal;
 use ic_cdk::api::management_canister::http_request::HttpMethod;
 use icgeek_ic_call_api::{AgentCallResponseData, AgentQueryRequest};
@@ -17,7 +17,7 @@ pub async fn execute_ic_query(
     let effective_canister_id = request.canister_id;
     let envelope = request.request_sign;
 
-    let response = execute_ic_request(
+    execute_ic_request(
         ic_url,
         HttpMethod::POST,
         &format!("canister/{effective_canister_id}/query"),
@@ -28,12 +28,16 @@ pub async fn execute_ic_query(
         max_response_bytes,
         cycles,
     )
-    .await?;
+    .await
 
-    match (serde_cbor::from_slice(response.as_slice()) as serde_cbor::Result<QueryResponse>)
-        .map_err(AgentError::InvalidCborData)?
-    {
-        QueryResponse::Replied { reply } => Ok(reply.arg),
-        QueryResponse::Rejected(response) => Err(AgentError::ReplicaError(response)),
+    // in transformer we extract query reply information
+}
+
+pub fn get_reply_from_query_response_body(response_body: &[u8]) -> Option<Vec<u8>> {
+    let query_response: Result<QueryResponse, AgentError> = deserialize_cbor_data(response_body);
+    if let Ok(QueryResponse::Replied { reply }) = query_response {
+        Some(reply.arg)
+    } else {
+        None
     }
 }

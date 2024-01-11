@@ -133,7 +133,7 @@ pub struct Configure {
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub enum Operation {
     // RemoveHotKey : RemoveHotKey;
-    // AddHotKey : AddHotKey;
+    AddHotKey(AddHotKey),
     // ChangeAutoStakeMaturity : ChangeAutoStakeMaturity;
     // StopDissolving : record {};
     // StartDissolving : record {};
@@ -141,6 +141,11 @@ pub enum Operation {
     // JoinCommunityFund : record {};
     // LeaveCommunityFund : record {};
     // SetDissolveTimestamp : SetDissolveTimestamp;
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct AddHotKey {
+    pub new_hot_key: Option<Principal>
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

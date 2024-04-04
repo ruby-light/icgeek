@@ -146,7 +146,7 @@ pub enum Operation {
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct AddHotKey {
-    pub new_hot_key: Option<Principal>
+    pub new_hot_key: Option<Principal>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

@@ -33,19 +33,18 @@ async fn perform_query(
         .query(request.canister_id, request.request_sign)
         .await?;
 
-    match (serde_cbor::from_slice(response.as_slice()) as serde_cbor::Result<QueryResponse>).map_err(AgentError::InvalidCborData)? {
+    match (serde_cbor::from_slice(response.as_slice()) as serde_cbor::Result<QueryResponse>)
+        .map_err(AgentError::InvalidCborData)?
+    {
         QueryResponse::Replied { reply } => Ok(reply.arg),
-        QueryResponse::Rejected(response) => {
-            Err(AgentError::ReplicaError(response))
-        }
-        // QueryResponse::Rejected {
-        //     reject_code,
-        //     reject_message,
-        // } => Err(AgentError::ReplicaError(RejectResponse {
-        //     reject_code: RejectCode::try_from(reject_code).unwrap(),
-        //     reject_message,
-        //     error_code: None,
-        // })),
+        QueryResponse::Rejected(response) => Err(AgentError::ReplicaError(response)), // QueryResponse::Rejected {
+                                                                                      //     reject_code,
+                                                                                      //     reject_message,
+                                                                                      // } => Err(AgentError::ReplicaError(RejectResponse {
+                                                                                      //     reject_code: RejectCode::try_from(reject_code).unwrap(),
+                                                                                      //     reject_message,
+                                                                                      //     error_code: None,
+                                                                                      // })),
     }
 }
 

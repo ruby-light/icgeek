@@ -62,6 +62,7 @@ pub struct Neuron {
     pub controller: Option<Principal>,
     pub recent_ballots: Vec<BallotInfo>,
     pub kyc_verified: bool,
+    pub neuron_type: Option<i32>,
     pub not_for_profit: bool,
     pub maturity_e8s_equivalent: u64,
     pub cached_neuron_stake_e8s: u64,

@@ -57,6 +57,12 @@ pub struct NeuronStakeTransfer {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct KnownNeuronData {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Neuron {
     pub id: Option<NeuronId>,
     pub controller: Option<Principal>,
@@ -77,6 +83,7 @@ pub struct Neuron {
     pub transfer: Option<NeuronStakeTransfer>,
     pub staked_maturity_e8s_equivalent: Option<u64>,
     pub auto_stake_maturity: Option<bool>,
+    pub known_neuron_data: Option<KnownNeuronData>,
     pub spawn_at_timestamp_seconds: Option<u64>,
 }
 
